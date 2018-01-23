@@ -71,50 +71,88 @@ function copyExtendscriptFolder() {
   });
 }
 
+function isWindows() {
+  return process.platform === 'win32';
+}
+
+function symlink(src, dest) {
+  const symlinkType = isWindows() ? 'junction' : 'dir';
+  require('fs').symlinkSync(src, dest, symlinkType);	
+}
+
 function symlinkExtendscriptFolder() {
   const dest = paths.appBuild + '/extendscript';
-  // fs.removeSync(dest)
-  require('fs').symlinkSync(paths.appExtendscriptSrc, dest);
+  symlink(paths.appExtendscriptSrc, dest);
+}
+
+function setWindowsDebugMode(version, value) {
+  let Key = require('windows-registry').Key;
+  let windef = require('windows-registry').windef;
+  let registry = require('windows-registry').registry;
+  try {
+    let key = new Key(windef.HKEY.HKEY_CURRENT_USER, 'Software\\Adobe\\' + version, windef.KEY_ACCESS.KEY_ALL_ACCESS);
+	registry.setValueForKeyObject(key, 'PlayerDebugMode', windef.REG_VALUE_TYPE.REG_SZ, value);
+    key.close();
+  } catch (err) {
+    if (err.indexOf('ERROR_FILE_NOT_FOUND') > -1) {
+      // Ignore this, it just means that the specific version isn't installed.
+    } else {
+      console.error('Failed to create key ' + version, error);
+    }
+  }
 }
 
 function enablePlayerDebugMode() {
   // enable unsigned extensions for the foreseable future
-  execSync(
+  if (isWindows()) {
+    setWindowsDebugMode('CSXS.6', '1');
+	setWindowsDebugMode('CSXS.7', '1');
+	setWindowsDebugMode('CSXS.8', '1');
+  } else {
+    execSync(
+      `
+      defaults write com.adobe.CSXS.15 PlayerDebugMode 1;
+      defaults write com.adobe.CSXS.14 PlayerDebugMode 1;
+      defaults write com.adobe.CSXS.13 PlayerDebugMode 1;
+      defaults write com.adobe.CSXS.12 PlayerDebugMode 1;
+      defaults write com.adobe.CSXS.11 PlayerDebugMode 1;
+      defaults write com.adobe.CSXS.10 PlayerDebugMode 1;
+      defaults write com.adobe.CSXS.9 PlayerDebugMode 1;
+      defaults write com.adobe.CSXS.8 PlayerDebugMode 1;
+      defaults write com.adobe.CSXS.7 PlayerDebugMode 1;
+      defaults write com.adobe.CSXS.6 PlayerDebugMode 1;
+      defaults write com.adobe.CSXS.5 PlayerDebugMode 1;
+      defaults write com.adobe.CSXS.4 PlayerDebugMode 1;
     `
-    defaults write com.adobe.CSXS.15 PlayerDebugMode 1;
-    defaults write com.adobe.CSXS.14 PlayerDebugMode 1;
-    defaults write com.adobe.CSXS.13 PlayerDebugMode 1;
-    defaults write com.adobe.CSXS.12 PlayerDebugMode 1;
-    defaults write com.adobe.CSXS.11 PlayerDebugMode 1;
-    defaults write com.adobe.CSXS.10 PlayerDebugMode 1;
-    defaults write com.adobe.CSXS.9 PlayerDebugMode 1;
-    defaults write com.adobe.CSXS.8 PlayerDebugMode 1;
-    defaults write com.adobe.CSXS.7 PlayerDebugMode 1;
-    defaults write com.adobe.CSXS.6 PlayerDebugMode 1;
-    defaults write com.adobe.CSXS.5 PlayerDebugMode 1;
-    defaults write com.adobe.CSXS.4 PlayerDebugMode 1;
-  `
-  );
+    );
+  }
 }
 
 function disablePlayerDebugMode() {
   // disable unsigned extensions for the foreseable future
-  execSync(
+  if (isWindows()) {
+    // HKEY_CURRENT_USER/Software/Adobe/CSXS.6 PlayerDebugMode string "1"
+	setWindowsDebugMode('CSXS.6', '0');
+	setWindowsDebugMode('CSXS.7', '0');
+	setWindowsDebugMode('CSXS.8', '0');
+  } else {
+    execSync(
+      `
+      defaults write com.adobe.CSXS.15 PlayerDebugMode 0;
+      defaults write com.adobe.CSXS.14 PlayerDebugMode 0;
+      defaults write com.adobe.CSXS.13 PlayerDebugMode 0;
+      defaults write com.adobe.CSXS.12 PlayerDebugMode 0;
+      defaults write com.adobe.CSXS.11 PlayerDebugMode 0;
+      defaults write com.adobe.CSXS.10 PlayerDebugMode 0;
+      defaults write com.adobe.CSXS.9 PlayerDebugMode 0;
+      defaults write com.adobe.CSXS.8 PlayerDebugMode 0;
+      defaults write com.adobe.CSXS.7 PlayerDebugMode 0;
+      defaults write com.adobe.CSXS.6 PlayerDebugMode 0;
+      defaults write com.adobe.CSXS.5 PlayerDebugMode 0;
+      defaults write com.adobe.CSXS.4 PlayerDebugMode 0;
     `
-    defaults write com.adobe.CSXS.15 PlayerDebugMode 0;
-    defaults write com.adobe.CSXS.14 PlayerDebugMode 0;
-    defaults write com.adobe.CSXS.13 PlayerDebugMode 0;
-    defaults write com.adobe.CSXS.12 PlayerDebugMode 0;
-    defaults write com.adobe.CSXS.11 PlayerDebugMode 0;
-    defaults write com.adobe.CSXS.10 PlayerDebugMode 0;
-    defaults write com.adobe.CSXS.9 PlayerDebugMode 0;
-    defaults write com.adobe.CSXS.8 PlayerDebugMode 0;
-    defaults write com.adobe.CSXS.7 PlayerDebugMode 0;
-    defaults write com.adobe.CSXS.6 PlayerDebugMode 0;
-    defaults write com.adobe.CSXS.5 PlayerDebugMode 0;
-    defaults write com.adobe.CSXS.4 PlayerDebugMode 0;
-  `
-  );
+    );
+  }
 }
 
 function tailLogs() {
@@ -195,20 +233,34 @@ function writeExtensionTemplates(env, { port } = {}) {
 }
 
 function getExtenstionPath() {
-  return '/Library/Application Support/Adobe/CEP/extensions';
+  if (isWindows()) {
+	const os = require('os');
+	if (os.arch() === 'x64') {
+      return 'c:\\Program Files (x86)\\Common Files\\Adobe\\CEP\\extensions';
+	} else {
+      return 'c:\\Program Files\\Common Files\\Adobe\\CEP\\extensions';
+	}
+  } else {
+    return '/Library/Application Support/Adobe/CEP/extensions';
+  }
 }
 
 function getSymlinkExtensionPath() {
   const { BUNDLE_ID } = getSettings();
-  const extensionPath = getExtenstionPath();
-  return path.join(process.env.HOME, extensionPath, BUNDLE_ID);
+  
+  if (isWindows()) {
+	  return path.join(process.env.APPDATA, 'Adobe\\CEP\\extensions', BUNDLE_ID);
+  } else {
+    const extensionPath = getExtenstionPath();
+    return path.join(process.env.HOME, extensionPath, BUNDLE_ID);
+  }
 }
 
 function symlinkExtension() {
   fs.ensureDirSync(getExtenstionPath());
   let target = getSymlinkExtensionPath();
   fs.removeSync(target);
-  fs.symlinkSync(paths.appBuild, target);
+  symlink(paths.appBuild, target);
 }
 
 function printCEPExtensionLocation() {
@@ -217,8 +269,8 @@ function printCEPExtensionLocation() {
 
 function printCEPLogLocation() {
   let logLocation;
-  if (process.platform === 'win32') {
-    logLocation = path.join(process.env.HOME, 'AppDataLocalTemp');
+  if (isWindows()) {
+    logLocation = process.env.TEMP;
   } else {
     logLocation = path.join(process.env.HOME, 'Library/Logs/CSXS');
   }
